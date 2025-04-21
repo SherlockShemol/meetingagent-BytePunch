@@ -95,11 +95,11 @@ func CreateMeeting(ctx context.Context, c *app.RequestContext) {
 	}
 
 	// 构建完整数据
-	meetingData := map[string]interface{}{
-		"meeting_id": response.ID,
-		"content":    reqBody,
-		"summary":    summary,
-		"created_at": time.Now().Format(time.RFC3339),
+	meetingData := models.Meeting{
+		ID:        response.ID,
+		Content:   reqBody,
+		Summary:   summary,
+		CreatedAt: time.Now().Format(time.RFC3339),
 	}
 
 	completeData, err := json.Marshal(meetingData)
@@ -120,21 +120,36 @@ func CreateMeeting(ctx context.Context, c *app.RequestContext) {
 // ListMeetings handles listing all meetings
 func ListMeetings(ctx context.Context, c *app.RequestContext) {
 	// TODO: Implement actual meeting retrieval logic
-	response := models.GetMeetingsResponse{
-		Meetings: []models.Meeting{
-			{
-				ID: "meeting_123",
-				Content: map[string]interface{}{
-					"title":        "Sample Meeting",
-					"description":  "This is a sample meeting",
-					"participants": []string{"John Doe", "Jane Smith"},
-					"start_time":   "2025-04-20 08:00:00",
-					"end_time":     "2025-04-20 09:00:00",
-					"content":      "This is the content of the meeting",
-				},
-			},
-		},
+	keys, err := redis.Client.Keys(ctx, "meeting:*").Result()
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "无法获取会议列表"})
+		return
 	}
+
+	var meetings []models.Meeting
+
+	// 遍历每个键并获取会议数据
+	for _, key := range keys {
+		data, err := redis.Client.Get(ctx, key).Result()
+		if err != nil {
+			log.Printf("Error retrieving meeting data for key %s: %v", key, err)
+			continue
+		}
+
+		var meeting models.Meeting
+		if err := json.Unmarshal([]byte(data), &meeting); err != nil {
+			log.Printf("Error unmarshalling meeting data for key %s: %v", key, err)
+			continue
+		}
+
+		meetings = append(meetings, meeting)
+	}
+
+	// 返回会议列表
+	response := models.GetMeetingsResponse{
+		Meetings: meetings,
+	}
+	log.Printf("response:= %+v", response)
 
 	c.JSON(consts.StatusOK, response)
 }
@@ -198,7 +213,7 @@ func LLM() (string, error) {
 		return "", err
 	}
 	// 读取content.json
-	data, err := os.ReadFile("d:/Github/meetingagent-BytePunch/example/content.json")
+	data, err := os.ReadFile("d:/Github/meetingagent-BytePunch/example/test.json")
 	if err != nil {
 		log.Printf("读取content.json失败: %v\n", err)
 		return "", err
