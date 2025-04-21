@@ -87,13 +87,33 @@ func CreateMeeting(ctx context.Context, c *app.RequestContext) {
 		ID: "meeting_" + time.Now().Format("20060102150405"),
 	}
 
-	// 使用Redis
-	err = redis.Client.Set(ctx, "meeting:"+response.ID, jsonBody, 0).Err()
+	// 调用LLM生成总结
+	summary, err := LLM()
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "生成会议总结失败"})
+		return
+	}
+
+	// 构建完整数据
+	meetingData := map[string]interface{}{
+		"meeting_id": response.ID,
+		"content":    reqBody,
+		"summary":    summary,
+		"created_at": time.Now().Format(time.RFC3339),
+	}
+
+	completeData, err := json.Marshal(meetingData)
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "数据序列化失败"})
+		return
+	}
+	//log.Printf("create meeting: %s\n", response.ID)
+
+	err = redis.Client.Set(ctx, "meeting:"+response.ID, completeData, 0).Err()
 	if err != nil {
 		c.JSON(consts.StatusInternalServerError, utils.H{"error": "保存到Redis失败"})
 		return
 	}
-	//log.Printf("create meeting: %s\n", response.ID)
 	c.JSON(consts.StatusOK, response)
 }
 
@@ -130,17 +150,31 @@ func GetMeetingSummary(ctx context.Context, c *app.RequestContext) {
 
 	fmt.Printf("meetingID: %s\n", meetingID)
 	// TODO: Implement actual summary retrieval logic
-	summary, err := LLM()
 
+	// 从Redis获取会议数据
+	data, err := redis.Client.Get(ctx, "meeting:"+meetingID).Result()
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "获取会议数据失败"})
+		return
+	}
+
+	// 解析JSON数据
+	var meetingData map[string]interface{}
+	if err := json.Unmarshal([]byte(data), &meetingData); err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "解析会议数据失败"})
+		return
+	}
 	if err != nil {
 		c.JSON(consts.StatusInternalServerError, utils.H{"error": err.Error()})
 		return
 	}
 
 	response := map[string]interface{}{
-		"content": summary,
+		"meeting_id": meetingID,
+		"summary":    meetingData["summary"],
+		"created_at": meetingData["created_at"],
 	}
-
+	log.Printf("response解析完毕")
 	c.JSON(consts.StatusOK, response)
 }
 
