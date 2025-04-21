@@ -40,7 +40,7 @@ func init() {
 func main() {
 	ctx := context.Background()
 
-	err := indexTxtFiles(ctx, "./example/content.md")
+	err := indexMarkdownFiles(ctx, "./example/content.md")
 	if err != nil {
 		panic(err)
 	}

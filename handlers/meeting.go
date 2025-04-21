@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"bufio"
 	"context"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,8 +14,6 @@ import (
 	"meetingagent/handlers/agent"
 	"meetingagent/models"
 	"meetingagent/pkg/env"
-	"meetingagent/pkg/mem"
-	"meetingagent/pkg/tool/task"
 	"meetingagent/redis"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -228,7 +224,6 @@ type MeetingContent struct {
 func LLM() (string, error) {
 	// 读取content.json
 	data, err := os.ReadFile("./example/content.json")
-	data, err := os.ReadFile("./example/content.json")
 	if err != nil {
 		log.Printf("读取content.json失败: %v\n", err)
 		return "", err
@@ -361,226 +356,4 @@ outer:
 			}
 		}
 	}
-}
-
-func HandleHistory(ctx context.Context, c *app.RequestContext) {
-	// query: id => get history, none => list all
-	id := c.Query("session_id")
-
-	if id == "" {
-		ids := mem.GetDefaultMemory().ListConversations()
-
-		c.JSON(consts.StatusOK, map[string]interface{}{
-			"ids": ids,
-		})
-		return
-	}
-
-	conversation := mem.GetDefaultMemory().GetConversation(id, false)
-	if conversation == nil {
-		c.JSON(consts.StatusNotFound, map[string]string{
-			"error": "conversation not found",
-		})
-		return
-	}
-
-	c.JSON(consts.StatusOK, map[string]interface{}{
-		"conversation": conversation,
-	})
-
-}
-
-func HandleDeleteHistory(ctx context.Context, c *app.RequestContext) {
-	id := c.Query("session_id")
-	if id == "" {
-		c.JSON(consts.StatusBadRequest, map[string]string{
-			"error": "missing id parameter",
-		})
-		return
-	}
-
-	mem.GetDefaultMemory().DeleteConversation(id)
-	c.JSON(consts.StatusOK, map[string]string{
-		"status": "success",
-	})
-}
-
-func HandleLog(ctx context.Context, c *app.RequestContext) {
-	file, err := os.Open("log/eino.log")
-	if err != nil {
-		c.JSON(consts.StatusInternalServerError, map[string]string{
-			"status": "error",
-			"error":  err.Error(),
-		})
-		return
-	}
-	defer file.Close()
-
-	// Create a new SSE stream
-	s := sse.NewStream(c)
-	defer c.Flush()
-
-	// Seek to the end of the file
-	_, err = file.Seek(0, io.SeekEnd)
-	if err != nil {
-		log.Println("error seeking file:", err)
-		return
-	}
-
-	// Use a goroutine to continuously read new lines
-	go func() {
-		reader := bufio.NewReader(file)
-		for {
-			line, err := reader.ReadString('\n')
-			if err != nil && err != io.EOF {
-				log.Println("error reading log:", err)
-				break
-			}
-
-			// If we got a line, publish it
-			if line != "" {
-				err = s.Publish(&sse.Event{
-					Data: []byte(line),
-				})
-				if err != nil {
-					log.Println("error publishing log:", err)
-					break
-				}
-			}
-
-			// If we hit EOF, wait a bit and try again
-			if err == io.EOF {
-				time.Sleep(100 * time.Millisecond)
-				continue
-			}
-		}
-	}()
-
-	// Keep the connection open
-	<-ctx.Done()
-}
-
-var webContent embed.FS
-
-// BindRoutes 注册路由
-func GetTaskList(ctx context.Context, c *app.RequestContext) error {
-	taskTool, err := task.NewTaskToolImpl(ctx, &task.TaskToolConfig{
-		Storage: task.GetDefaultStorage(),
-	})
-	if err != nil {
-		return err
-	}
-
-	// API 处理
-	var req task.TaskRequest
-	if err := c.Bind(&req); err != nil {
-		c.JSON(consts.StatusBadRequest, map[string]string{
-			"status": "error",
-			"error":  err.Error(),
-		})
-		return nil
-	}
-
-	resp, _ := taskTool.Invoke(ctx, &req)
-
-	c.JSON(consts.StatusOK, resp)
-
-	return nil
-}
-
-func HandleHistory(ctx context.Context, c *app.RequestContext) {
-	// query: id => get history, none => list all
-	id := c.Query("session_id")
-
-	if id == "" {
-		ids := mem.GetDefaultMemory().ListConversations()
-
-		c.JSON(consts.StatusOK, map[string]interface{}{
-			"ids": ids,
-		})
-		return
-	}
-
-	conversation := mem.GetDefaultMemory().GetConversation(id, false)
-	if conversation == nil {
-		c.JSON(consts.StatusNotFound, map[string]string{
-			"error": "conversation not found",
-		})
-		return
-	}
-
-	c.JSON(consts.StatusOK, map[string]interface{}{
-		"conversation": conversation,
-	})
-
-}
-
-func HandleDeleteHistory(ctx context.Context, c *app.RequestContext) {
-	id := c.Query("session_id")
-	if id == "" {
-		c.JSON(consts.StatusBadRequest, map[string]string{
-			"error": "missing id parameter",
-		})
-		return
-	}
-
-	mem.GetDefaultMemory().DeleteConversation(id)
-	c.JSON(consts.StatusOK, map[string]string{
-		"status": "success",
-	})
-}
-
-func HandleLog(ctx context.Context, c *app.RequestContext) {
-	file, err := os.Open("log/eino.log")
-	if err != nil {
-		c.JSON(consts.StatusInternalServerError, map[string]string{
-			"status": "error",
-			"error":  err.Error(),
-		})
-		return
-	}
-	defer file.Close()
-
-	// Create a new SSE stream
-	s := sse.NewStream(c)
-	defer c.Flush()
-
-	// Seek to the end of the file
-	_, err = file.Seek(0, io.SeekEnd)
-	if err != nil {
-		log.Println("error seeking file:", err)
-		return
-	}
-
-	// Use a goroutine to continuously read new lines
-	go func() {
-		reader := bufio.NewReader(file)
-		for {
-			line, err := reader.ReadString('\n')
-			if err != nil && err != io.EOF {
-				log.Println("error reading log:", err)
-				break
-			}
-
-			// If we got a line, publish it
-			if line != "" {
-				err = s.Publish(&sse.Event{
-					Data: []byte(line),
-				})
-				if err != nil {
-					log.Println("error publishing log:", err)
-					break
-				}
-			}
-
-			// If we hit EOF, wait a bit and try again
-			if err == io.EOF {
-				time.Sleep(100 * time.Millisecond)
-				continue
-			}
-		}
-	}()
-
-	// Keep the connection open
-	<-ctx.Done()
 }
