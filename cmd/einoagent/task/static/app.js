@@ -207,7 +207,7 @@ async function loadMeetings() {
 
     meetingList.innerHTML = data.meetings.map(meeting => `
             <div class="meeting-item" data-id="${meeting.id}">
-                <div class="font-medium">${meeting.content.title || 'Untitled Meeting'}</div>
+                <div class="font-medium">${meeting.id || 'Untitled Meeting'}</div>
                 <div class="text-sm text-gray-500">${new Date().toLocaleDateString()}</div>
             </div>
         `).join('');
@@ -317,18 +317,32 @@ async function selectMeeting(meetingId) {
     }
 
     // Update summary JSON editor
-    summaryJsonEditor.set(data);
-    summaryJsonEditor.expandAll();
+    console.log('Received summary data:', data);
+    const summaryContent = data && typeof data.summary === 'string' ? data.summary : '无摘要内容';
 
-    // Reset markdown view
-    summaryJsonViewer.classList.remove('hidden');
-    summaryMarkdown.classList.add('hidden');
-    jsonPathInput.value = '';
-    currentJsonPath = ''; // 重置 JSON Path 状态
+    // 显示 Markdown 内容
+    summaryMarkdown.classList.remove('hidden');
+    summaryJsonViewer.classList.add('hidden');
+    summaryMarkdown.innerHTML = marked.parse(summaryContent); // 渲染 Markdown
 
   } catch (error) {
     console.error('Error loading summary:', error);
+    summaryMarkdown.classList.remove('hidden');
+    summaryMarkdown.textContent = '无法加载摘要内容';
   }
+  //   const summaryContent = data.summary || '';
+  //   summaryJsonEditor.set({ summary: summaryContent });
+  //   summaryJsonEditor.expandAll();
+
+  //   // Reset markdown view
+  //   summaryJsonViewer.classList.remove('hidden');
+  //   summaryMarkdown.classList.add('hidden');
+  //   jsonPathInput.value = '';
+  //   currentJsonPath = ''; // 重置 JSON Path 状态
+
+  // } catch (error) {
+  //   console.error('Error loading summary:', error);
+  // }
 
   // Clear chat
   chatMessages.innerHTML = '';

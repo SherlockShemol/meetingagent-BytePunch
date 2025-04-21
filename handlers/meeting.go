@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"meetingagent/cmd/einoagent/agent"
@@ -34,6 +33,7 @@ const prompt string = `
 - 识别并提取会议内容中的关键讨论点、决策和行动项
 - 将非结构化的会议数据（记录、笔记）转化为简洁、结构化的摘要
 - 高精度分析和综合自然语言内容
+- 生成的内容的标题应该简洁明了，且为一级标题
 - 理解常见的会议工作流程，并与协作工具（例如日历、任务跟踪器）集成
 
 ## Interaction Guidelines
@@ -44,8 +44,10 @@ const prompt string = `
 
 - When providing assistance:
   • 提供简洁、条理清晰的摘要，优先考虑清晰度和可读性
-  • 突出关键元素：做出的决策、分配的行动项（包括责任人和截止日期）以及主要讨论点
+  • 突出会议主要的讨论点以及结果
+  • 突出关键元素：做出的决策、分配的行动项（包括责任人和截止日期），决策和分配的行动项最好能按表格展示
   • 引用会议中的简短相关示例或话语，以支持关键结论
+  • 如果生成的内容能够细分为多点，请将其分解为多个要点
   • 提供可操作的后续步骤，例如基于这次会议提出的任务进行记录
 
 
@@ -58,10 +60,10 @@ const prompt string = `
   • 一步步思考，保证答案的正确性和完整性
 
 ## Context Information
-- 当前日期: {date}
+- 当前日期: {meetingDate}
 - 会议材料: |-
 ==== meeting_doc start ====
-  {meeting_transcript_or_notes}
+  {meetingTranscript}
 ==== meeting_doc end ====
 `
 
@@ -81,22 +83,24 @@ func CreateMeeting(ctx context.Context, c *app.RequestContext) {
 		c.JSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
-
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		c.JSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
 		return
 	}
 
-	fmt.Printf("create meeting: %s\n", string(jsonBody))
+	//fmt.Printf("create meeting: %s\n", string(jsonBody))
 
 	// TODO: Implement actual meeting creation logic
 	response := models.PostMeetingResponse{
 		ID: "meeting_" + time.Now().Format("20060102150405"),
 	}
 
+	meetingDate := time.Now().Format("2006-01-02")
+	meetingTranscript := string(jsonBody)
+	prompt := fmt.Sprintf(prompt, meetingDate, meetingTranscript)
 	// 调用LLM生成总结
-	summary, err := LLM()
+	summary, err := LLM(prompt)
 	if err != nil {
 		c.JSON(consts.StatusInternalServerError, utils.H{"error": "生成会议总结失败"})
 		return
@@ -157,7 +161,7 @@ func ListMeetings(ctx context.Context, c *app.RequestContext) {
 	response := models.GetMeetingsResponse{
 		Meetings: meetings,
 	}
-	log.Printf("response:= %+v", response)
+	//log.Printf("response:= %+v", response)
 
 	c.JSON(consts.StatusOK, response)
 }
@@ -197,7 +201,7 @@ func GetMeetingSummary(ctx context.Context, c *app.RequestContext) {
 		"summary":    meetingData["summary"],
 		"created_at": meetingData["created_at"],
 	}
-	log.Printf("response解析完毕")
+	log.Printf("读取redis的会议内容")
 	c.JSON(consts.StatusOK, response)
 }
 
@@ -213,26 +217,23 @@ type MeetingContent struct {
 	} `json:"contents"`
 }
 
-func LLM() (string, error) {
+func LLM(prompt string) (string, error) {
 	// 读取content.json
-	data, err := os.ReadFile("./example/content.json")
-	if err != nil {
-		log.Printf("读取content.json失败: %v\n", err)
-		return "", err
-	}
-	var meeting MeetingContent
-	err = json.Unmarshal(data, &meeting)
-	if err != nil {
-		log.Printf("解析content.json失败: %v\n", err)
-		return "", err
-	}
+	inputText := prompt
+	//data := reqBody
+	// var meeting MeetingContent
+	// err := json.Unmarshal(data, &meeting)
+	// if err != nil {
+	// 	log.Printf("解析content.json失败: %v\n", err)
+	// 	return "", err
+	// }
 
 	// 拼接所有文本内容
-	var allText []string
-	for _, item := range meeting.Contents {
-		allText = append(allText, item.Content.Text)
-	}
-	inputText := strings.Join(allText, "\n")
+	// var allText []string
+	// for _, item := range meeting.Contents {
+	// 	allText = append(allText, item.Content.Text)
+	// }
+	// inputText := strings.Join(allText, "\n")
 
 	client := arkruntime.NewClientWithApiKey(
 		os.Getenv("ARK_API_KEY"),
@@ -245,12 +246,6 @@ func LLM() (string, error) {
 			{
 				Role: model.ChatMessageRoleSystem,
 				Content: &model.ChatCompletionMessageContent{
-					StringValue: volcengine.String(prompt),
-				},
-			},
-			{
-				Role: model.ChatMessageRoleUser,
-				Content: &model.ChatCompletionMessageContent{
 					StringValue: volcengine.String(inputText),
 				},
 			},
@@ -258,6 +253,7 @@ func LLM() (string, error) {
 	}
 
 	resp, err := client.CreateChatCompletion(ctx, req)
+	log.Printf("resp生成完毕")
 	if err != nil {
 		log.Printf("standard chat error: %v", err)
 		return "", err
