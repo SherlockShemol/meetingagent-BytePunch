@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"meetingagent/handlers/agent"
+	"meetingagent/cmd/einoagent/agent"
 	"meetingagent/models"
 	"meetingagent/pkg/env"
 	"meetingagent/redis"
@@ -64,14 +64,6 @@ const prompt string = `
   {meeting_transcript_or_notes}
 ==== meeting_doc end ====
 `
-
-func init() {
-	// 加载.env文件
-	err := godotenv.Load()
-	if err != nil {
-		log.Printf("Error loading.env file: %v\n", err)
-	}
-}
 
 func init() {
 	// 加载.env文件
