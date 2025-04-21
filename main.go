@@ -6,12 +6,15 @@ import (
 	"time"
 
 	"meetingagent/handlers"
+	"meetingagent/redis"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
 )
 
 func main() {
+
+	redis.Init()
 	h := server.Default()
 	h.Use(Logger())
 
@@ -48,5 +51,6 @@ func Logger() app.HandlerFunc {
 		latency := time.Since(start)
 		statusCode := c.Response.StatusCode()
 		log.Printf("[HTTP] %s %s %d %v\n", method, path, statusCode, latency)
+
 	}
 }
