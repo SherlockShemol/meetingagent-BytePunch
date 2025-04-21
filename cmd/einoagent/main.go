@@ -50,7 +50,7 @@ func main() {
 
 	// Serve static files
 	h.StaticFS("/", &app.FS{
-		Root:               "./cmd/einoagent/task/static",
+		Root:               "D:\\Github\\meetingagent-BytePunch\\cmd\\einoagent\\task\\static",
 		PathRewrite:        app.NewPathSlashesStripper(1),
 		IndexNames:         []string{"index.html"},
 		GenerateIndexPages: true,
