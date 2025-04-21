@@ -65,6 +65,7 @@ func indexMarkdownFiles(ctx context.Context, dir string) error {
 
 		if !strings.HasSuffix(path, ".md") {
 			fmt.Printf("[skip] not a markdown file: %s\n", path)
+			fmt.Printf("[skip] not a md file: %s\n", path)
 			return nil
 		}
 
