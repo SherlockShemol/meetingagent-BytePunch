@@ -19,22 +19,35 @@ package task
 import (
 	"context"
 	"embed"
-	"encoding/json"
 	"mime"
 	"path/filepath"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/cloudwego/hertz/pkg/route"
 
-	"meetingagent/redis" // 新增redis导入
+	// 新增redis导入
 
 	"github.com/cloudwego/eino-examples/quickstart/eino_assistant/pkg/tool/task"
 )
 
 //go:embed static/*
 var webContent embed.FS
+
+// 参数结构体
+type TodoUpdateParams struct {
+	ID        string  `json:"id" jsonschema:"description=id of the todo"`
+	Content   *string `json:"content,omitempty" jsonschema:"description=content of the todo"`
+	StartedAt *int64  `json:"started_at,omitempty" jsonschema:"description=start time in unix timestamp"`
+	Deadline  *int64  `json:"deadline,omitempty" jsonschema:"description=deadline of the todo in unix timestamp"`
+	Done      *bool   `json:"done,omitempty" jsonschema:"description=done status"`
+}
+
+// 处理函数
+func UpdateTodoFunc(_ context.Context, params *TodoUpdateParams) (string, error) {
+	// Mock处理逻辑
+	return `{"msg": "update todo success"}`, nil
+}
 
 // BindRoutes 注册路由
 func BindRoutes(r *route.RouterGroup) error {
@@ -58,54 +71,37 @@ func BindRoutes(r *route.RouterGroup) error {
 			})
 			return
 		}
-
-		// 新增任务生成功能
+		var summaryReq task.TaskRequest
 		if req.Action == "generate_from_summary" {
-			meetingID := req.List.MeetingID
-			if meetingID == "" {
-				c.JSON(consts.StatusBadRequest, utils.H{"error": "meeting_id is required"})
-				return
+			summaryReq = task.TaskRequest{
+				Action: "add",
+				Task: &task.Task{
+					ID:        "generate_from_summary",
+					Title:     "task from summary",
+					Content:   "task from summary",
+					Completed: false,
+					Deadline:  "2025-01-01",
+					IsDeleted: false,
+					CreatedAt: "2025-01-01",
+				},
+				List: &task.ListParams{
+					Query:  "all",
+					IsDone: nil,
+					Limit:  nil,
+				},
 			}
-
-			// 从Redis获取会议数据
-			data, err := redis.Client.Get(ctx, "meeting:"+meetingID).Result()
-			if err != nil {
-				c.JSON(consts.StatusInternalServerError, utils.H{
-					"status": "error",
-					"error":  "获取会议数据失败: " + err.Error(),
-				})
-				return
-			}
-
-			// 解析会议数据
-			var meetingData map[string]interface{}
-			if err := json.Unmarshal([]byte(data), &meetingData); err != nil {
-				c.JSON(consts.StatusInternalServerError, utils.H{
-					"status": "error",
-					"error":  "解析会议数据失败: " + err.Error(),
-				})
-				return
-			}
-
-			// 调用agent生成任务
-			summary, _ := meetingData["summary"].(string)
-			generatedTasks, err := taskTool.GenerateTasksFromText(ctx, summary)
-			if err != nil {
-				c.JSON(consts.StatusInternalServerError, utils.H{
-					"status": "error",
-					"error":  "生成任务失败: " + err.Error(),
-				})
-				return
-			}
-
-			// 返回生成的任务列表
-			c.JSON(consts.StatusOK, map[string]interface{}{
-				"status":    "success",
-				"task_list": generatedTasks,
+		} else {
+			summaryReq = req
+		}
+		summaryResp, err := taskTool.Invoke(ctx, &summaryReq)
+		if err != nil {
+			c.JSON(consts.StatusInternalServerError, map[string]string{
+				"status": "error",
+				"error":  err.Error(),
 			})
 			return
 		}
-
+		c.JSON(consts.StatusOK, summaryResp)
 		resp, err := taskTool.Invoke(ctx, &req)
 		if err != nil {
 			c.JSON(consts.StatusInternalServerError, map[string]string{
@@ -114,7 +110,6 @@ func BindRoutes(r *route.RouterGroup) error {
 			})
 			return
 		}
-
 		c.JSON(consts.StatusOK, resp)
 	})
 
@@ -146,13 +141,4 @@ func BindRoutes(r *route.RouterGroup) error {
 	})
 
 	return nil
-}
-
-func GenerateTasksFromSummary(ctx context.Context, summary string) ([]string, error) {
-	// 调用agent生成任务
-	generatedTasks, err := taskTool.GenerateTasksFromText(ctx, summary)
-	if err != nil {
-		return nil, err
-	}
-	return generatedTasks, nil
 }

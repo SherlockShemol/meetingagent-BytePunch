@@ -4,6 +4,7 @@ let currentSessionId = null;
 let currentMeetingContent = null;
 let jsonEditor = null;
 let summaryJsonEditor = null;
+let isTasksGenerated = false;
 
 // DOM Elements
 const meetingList = document.getElementById('meetingList');
@@ -73,6 +74,11 @@ function switchTab(tab) {
 
   // 如果切换到 Task Tab 且有选中的会议，则加载任务
   if (tab === 'task' && currentMeetingId) {
+    if (!isTasksGenerated) {
+      generateTasksFromSummary(currentMeetingId);
+      isTasksGenerated = true;
+    }
+    
     loadTasks(currentMeetingId);
   }
 }
@@ -221,57 +227,67 @@ async function loadMeetings() {
   }
 }
 
-// 新增: 加载任务列表的函数
-async function loadTasks(meetingId) {
-  if (!meetingId) return;
-  taskList.innerHTML = '<p class="text-gray-500">Loading tasks...</p>'; // 显示加载状态
+
+async function loadTasks() {
+  const params = getQueryParams();
+  const taskListElement = document.getElementById('taskList');
+  if (!taskListElement) return;
+
+  taskListElement.innerHTML = '<p class="text-gray-500 p-4">加载中...</p>';
 
   try {
-    // 确保这里调用的是 /tasks 接口
-    const response = await fetch(`/tasks?meeting_id=${meetingId}`);
+      const response = await fetch('/task/api', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              action: 'list',
+              list: params
+          })
+      });
 
-    // 检查网络响应是否成功
-    if (!response.ok) {
-      // 尝试读取错误响应体（如果有的话）
-      let errorBody = '';
-      try {
-        errorBody = await response.text(); // 或者 response.json() 如果后端返回 JSON 错误
-      } catch (e) { /*忽略读取错误*/ }
-      throw new Error(`Failed to fetch tasks: ${response.status} ${response.statusText}. ${errorBody}`);
-    }
+      // 新增响应格式校验
+      if (!response.ok) {
+          throw new Error(`HTTP 错误: ${response.status}`);
+      }
 
-    const responseData = await response.json();
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('无效的响应格式');
+      }
 
-    // --- 修改开始: 更灵活地处理响应数据 ---
-    let tasksArray = [];
-    if (responseData && Array.isArray(responseData.tasks)) {
-      // 优先使用 { tasks: [...] } 结构
-      tasksArray = responseData.tasks;
-    } else if (Array.isArray(responseData)) {
-      // 兼容直接返回数组 [...] 的情况
-      tasksArray = responseData;
-    } else if (responseData && Array.isArray(responseData.result)) {
-      // 兼容可能存在的 { result: [...] } 结构
-      tasksArray = responseData.result;
-    }
-    // --- 修改结束 ---
+      const data = await response.json();
 
+      // 统一数据结构处理
+      let tasks = [];
+      if (data?.task_list && Array.isArray(data.task_list)) { // 匹配 server.go 的返回格式
+          tasks = data.task_list;
+      } else if (Array.isArray(data)) { // 兼容直接返回数组的情况
+          tasks = data;
+      } else {
+          console.error('未知的响应结构:', data);
+          throw new Error('服务器返回了意外的数据结构');
+      }
 
-    if (tasksArray.length > 0) {
-      // 根据实际返回的数据结构调整渲染逻辑
-      taskList.innerHTML = tasksArray.map((task, index) => `
-        <div class="p-2 border-b">
-          <input type="checkbox" id="task-${index}" class="mr-2">
-          <label for="task-${index}">${typeof task === 'string' ? task : JSON.stringify(task)}</label>
-        </div>
-      `).join('');
-    } else {
-      taskList.innerHTML = '<p class="text-gray-500">No tasks found for this meeting.</p>';
-    }
+      // 数据格式化
+      const formattedTasks = tasks.map(task => ({
+          id: task.id || Math.random().toString(36).substr(2, 9),
+          title: task.title || '未命名任务',
+          content: task.content || '',
+          deadline: task.deadline || null,
+          completed: task.completed || false,
+          created_at: task.created_at || new Date().toISOString()
+      }));
+
+      renderTasks(formattedTasks);
+
   } catch (error) {
-    console.error('Error loading tasks:', error); // 打印详细错误
-    // 在界面上显示更具体的错误信息
-    taskList.innerHTML = `<p class="text-red-500">Failed to load tasks. Error: ${error.message}</p>`;
+      console.error('加载任务失败:', error);
+      taskListElement.innerHTML = `
+          <div class="text-red-500 p-4">
+              <p>加载失败: ${error.message}</p>
+              ${error instanceof SyntaxError ? '<p class="text-sm">响应不是有效的 JSON</p>' : ''}
+          </div>
+      `;
   }
 }
 
@@ -1034,3 +1050,81 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeFormValues(); // Set initial form values from URL or defaults
     loadTasks(); // Initial task load
 });
+
+async function generateTasksFromSummary(meetingId) {
+  try {
+      const response = await fetch('/task/api', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              action: "generate_from_summary",
+              list: { meeting_id: meetingId }
+          })
+      });
+
+      // 检查网络响应状态
+      if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
+      const responseData = await response.json();
+      
+      // 检查业务状态
+      if (responseData.status !== 'success') {
+          throw new Error(responseData.error || '未知错误');
+      }
+
+      // 解析任务数据（适配两种格式）
+      const rawTasks = responseData.task_list?.Choices?.[0]?.Message?.Content?.StringValue || 
+                      responseData.task_list || 
+                      [];
+      
+      // 格式化任务数据
+      const formattedTasks = typeof rawTasks === 'string' ? 
+          parseTasksFromString(rawTasks) : 
+          rawTasks.map(t => ({
+              title: t.title || '新任务',
+              content: t.description || t.content || '',
+              deadline: t.due_date || null
+          }));
+
+      // 渲染任务列表
+      renderTasks(formattedTasks);
+      
+      // 自动切换到任务标签页
+      switchTab('task');
+      
+      // 显示成功提示
+      showToast('任务生成成功', 'success');
+      
+  } catch (error) {
+      console.error('生成任务失败:', error);
+      showToast(`生成失败: ${error.message}`, 'error');
+  }
+}
+
+// 辅助函数：解析字符串格式的任务
+function parseTasksFromString(taskString) {
+  const taskRegex = /(\d+)\.\s*任务描述：([^，]+)，负责人：([^，]+)，完成时间：([^\n]+)/g;
+  const matches = [...taskString.matchAll(taskRegex)];
+  
+  return matches.map(match => ({
+      title: match[2].trim(),
+      content: `负责人：${match[3].trim()}`, 
+      deadline: match[4].trim() !== '未提及' ? match[4].trim() : null
+  }));
+}
+
+// 辅助函数：显示通知
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg 
+                    ${type === 'success' ? 'bg-green-500 text-white' : 
+                     type === 'error' ? 'bg-red-500 text-white' : 
+                     'bg-blue-500 text-white'}`;
+  toast.textContent = message;
+  
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}

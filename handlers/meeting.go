@@ -26,7 +26,7 @@ import (
 )
 
 const prompt string = `
-# Role: 会议总结助手
+# Role: 会议总结和任务/Todo生成助手
 
 ## Core Competencies
 - 你获取的会议数据只会是文本格式，不会有其他非文本的数据输入
@@ -333,7 +333,6 @@ outer:
 				log.Printf("[Chat] Error marshalling JSON: %v\n", err)
 				continue // 如果序列化失败，跳过这条消息
 			}
-
 			// 发布JSON数据
 			err = s.Publish(&sse.Event{
 				Data: jsonData,

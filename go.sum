@@ -108,6 +108,8 @@ github.com/cloudwego/base64x v0.1.5 h1:XPciSp1xaq2VCSt6lF0phncD4koWyULpl5bUxbfCy
 github.com/cloudwego/base64x v0.1.5/go.mod h1:0zlkT4Wn5C6NdauXdJRhSKRlJvmclQ1hhJgA0rcu/8w=
 github.com/cloudwego/eino v0.3.25 h1:/ExJxjxsoGsbSQpa+glLqKsKgc6Njtknl6h0MuwJF0Q=
 github.com/cloudwego/eino v0.3.25/go.mod h1:wUjz990apdsaOraOXdh6CdhVXq8DJsOvLsVlxNTcNfY=
+github.com/cloudwego/eino v0.3.26 h1:FdJJTCdNrc9xPcYkLZiEyr7AA+WgyCKCbY+VNDXIaCE=
+github.com/cloudwego/eino v0.3.26/go.mod h1:wUjz990apdsaOraOXdh6CdhVXq8DJsOvLsVlxNTcNfY=
 github.com/cloudwego/eino-examples/quickstart/eino_assistant v0.0.0-20250331024332-7fc033fd1f94 h1:jW4tgGe68GT46vKBTTJeXnClyUvoYxUaRgsdj3oWYtg=
 github.com/cloudwego/eino-examples/quickstart/eino_assistant v0.0.0-20250331024332-7fc033fd1f94/go.mod h1:8jq+C1RY0bBj+kg/YZ3kmG3ra33ntct+Ox3NuvRkFYY=
 github.com/cloudwego/eino-ext/callbacks/apmplus v0.0.0-20250226083455-1ccdc82184a9 h1:0MnsNLZHwkvTDd3YWVp/gjOq1lRUNBZ9gk9F0pMfK8w=
