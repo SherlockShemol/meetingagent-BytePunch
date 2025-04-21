@@ -14,6 +14,7 @@ import (
 	"meetingagent/handlers/agent"
 	"meetingagent/models"
 	"meetingagent/pkg/env"
+	"meetingagent/redis"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -66,6 +67,7 @@ const prompt string = `
 
 // CreateMeeting handles the creation of a new meeting
 func CreateMeeting(ctx context.Context, c *app.RequestContext) {
+	log.Println("CreateMeeting 被调用")
 	var reqBody map[string]interface{}
 	if err := c.BindJSON(&reqBody); err != nil {
 		c.JSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
@@ -85,6 +87,13 @@ func CreateMeeting(ctx context.Context, c *app.RequestContext) {
 		ID: "meeting_" + time.Now().Format("20060102150405"),
 	}
 
+	// 使用Redis
+	err = redis.Client.Set(ctx, "meeting:"+response.ID, jsonBody, 0).Err()
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "保存到Redis失败"})
+		return
+	}
+	//log.Printf("create meeting: %s\n", response.ID)
 	c.JSON(consts.StatusOK, response)
 }
 
