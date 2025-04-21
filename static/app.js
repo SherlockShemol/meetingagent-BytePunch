@@ -280,8 +280,8 @@ async function sendMessage() {
 
   eventSource.onmessage = (event) => {
     const data = JSON.parse(event.data);
-     // you can change this to your data structure
-    addMessageToChat(assistantMsgID, data.data, 'assistant');
+    // 从响应中提取消息内容
+    addMessageToChat(assistantMsgID, data.data.message, 'assistant');
   };
 
   eventSource.onerror = () => {

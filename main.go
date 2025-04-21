@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"meetingagent/handlers"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
-	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
 func main() {
@@ -20,6 +20,7 @@ func main() {
 	h.GET("/meeting", handlers.ListMeetings)
 	h.GET("/summary", handlers.GetMeetingSummary)
 	h.GET("/chat", handlers.HandleChat)
+	h.GET("/task", handlers.GetTaskList)
 
 	// Serve static files
 	h.StaticFS("/", &app.FS{
@@ -33,30 +34,19 @@ func main() {
 	h.Spin()
 }
 
+// Logger 记录 HTTP 请求日志
 func Logger() app.HandlerFunc {
-	return func(c context.Context, ctx *app.RequestContext) {
+	return func(ctx context.Context, c *app.RequestContext) {
 		start := time.Now()
-		path := string(ctx.Request.URI().Path())
-		query := string(ctx.Request.URI().QueryString())
-		if query != "" {
-			path = path + "?" + query
-		}
+		path := string(c.Request.URI().Path())
+		method := string(c.Request.Method())
 
-		// Process request
-		ctx.Next(c)
+		// 处理请求
+		c.Next(ctx)
 
-		// Calculate latency
+		// 记录请求信息
 		latency := time.Since(start)
-
-		// Get response status code
-		statusCode := ctx.Response.StatusCode()
-
-		// Log request details
-		hlog.CtxInfof(c, "[HTTP] %s %s - %d - %v",
-			ctx.Request.Method(),
-			path,
-			statusCode,
-			latency,
-		)
+		statusCode := c.Response.StatusCode()
+		log.Printf("[HTTP] %s %s %d %v\n", method, path, statusCode, latency)
 	}
 }
