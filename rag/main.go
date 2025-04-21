@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package handlers
+package main
 
 import (
 	"context"
@@ -40,7 +40,7 @@ func init() {
 func main() {
 	ctx := context.Background()
 
-	err := indexTxtFiles(ctx, "/examples")
+	err := indexMarkdownFiles(ctx, "./eino-docs")
 	if err != nil {
 		panic(err)
 	}
@@ -48,7 +48,7 @@ func main() {
 	fmt.Println("index success")
 }
 
-func indexTxtFiles(ctx context.Context, dir string) error {
+func indexMarkdownFiles(ctx context.Context, dir string) error {
 	runner, err := knowledgeindexing.BuildKnowledgeIndexing(ctx)
 	if err != nil {
 		return fmt.Errorf("build index graph failed: %w", err)
@@ -63,8 +63,8 @@ func indexTxtFiles(ctx context.Context, dir string) error {
 			return nil
 		}
 
-		if !strings.HasSuffix(path, ".txt") {
-			fmt.Printf("[skip] not a txt file: %s\n", path)
+		if !strings.HasSuffix(path, ".md") {
+			fmt.Printf("[skip] not a markdown file: %s\n", path)
 			return nil
 		}
 

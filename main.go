@@ -23,7 +23,7 @@ func main() {
 	h.GET("/meeting", handlers.ListMeetings)
 	h.GET("/summary", handlers.GetMeetingSummary)
 	h.GET("/chat", handlers.HandleChat)
-	h.GET("/task", handlers.GetTaskList)
+	//h.GET("/tasks", handlers.GetTaskList) // 新增 Task 列表路由
 
 	// Serve static files
 	h.StaticFS("/", &app.FS{

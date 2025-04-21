@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"meetingagent/handlers/agent"
 	"meetingagent/models"
 	"meetingagent/pkg/env"
+	"meetingagent/pkg/mem"
 	"meetingagent/redis"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -64,6 +66,14 @@ const prompt string = `
   {meeting_transcript_or_notes}
 ==== meeting_doc end ====
 `
+
+func init() {
+	// 加载.env文件
+	err := godotenv.Load()
+	if err != nil {
+		log.Printf("Error loading.env file: %v\n", err)
+	}
+}
 
 // CreateMeeting handles the creation of a new meeting
 func CreateMeeting(ctx context.Context, c *app.RequestContext) {
@@ -206,14 +216,8 @@ type MeetingContent struct {
 }
 
 func LLM() (string, error) {
-	// 加载.env文件
-	err := godotenv.Load()
-	if err != nil {
-		log.Printf("Error loading .env file: %v\n", err)
-		return "", err
-	}
 	// 读取content.json
-	data, err := os.ReadFile("d:/Github/meetingagent-BytePunch/example/test.json")
+	data, err := os.ReadFile("./example/content.json")
 	if err != nil {
 		log.Printf("读取content.json失败: %v\n", err)
 		return "", err
@@ -284,11 +288,6 @@ func HandleChat(ctx context.Context, c *app.RequestContext) {
 
 	fmt.Printf("meetingID: %s, sessionID: %s, message: %s\n", meetingID, sessionID, message)
 
-	// Set SSE headers
-	c.Response.Header.Set("Content-Type", "text/event-stream")
-	c.Response.Header.Set("Cache-Control", "no-cache")
-	c.Response.Header.Set("Connection", "keep-alive")
-
 	sr, err := agent.RunAgent(ctx, sessionID, message)
 	if err != nil {
 		log.Printf("[Chat] Error running agent: %v\n", err)
@@ -351,4 +350,101 @@ outer:
 			}
 		}
 	}
+}
+
+func HandleHistory(ctx context.Context, c *app.RequestContext) {
+	// query: id => get history, none => list all
+	id := c.Query("session_id")
+
+	if id == "" {
+		ids := mem.GetDefaultMemory().ListConversations()
+
+		c.JSON(consts.StatusOK, map[string]interface{}{
+			"ids": ids,
+		})
+		return
+	}
+
+	conversation := mem.GetDefaultMemory().GetConversation(id, false)
+	if conversation == nil {
+		c.JSON(consts.StatusNotFound, map[string]string{
+			"error": "conversation not found",
+		})
+		return
+	}
+
+	c.JSON(consts.StatusOK, map[string]interface{}{
+		"conversation": conversation,
+	})
+
+}
+
+func HandleDeleteHistory(ctx context.Context, c *app.RequestContext) {
+	id := c.Query("session_id")
+	if id == "" {
+		c.JSON(consts.StatusBadRequest, map[string]string{
+			"error": "missing id parameter",
+		})
+		return
+	}
+
+	mem.GetDefaultMemory().DeleteConversation(id)
+	c.JSON(consts.StatusOK, map[string]string{
+		"status": "success",
+	})
+}
+
+func HandleLog(ctx context.Context, c *app.RequestContext) {
+	file, err := os.Open("log/eino.log")
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, map[string]string{
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+	defer file.Close()
+
+	// Create a new SSE stream
+	s := sse.NewStream(c)
+	defer c.Flush()
+
+	// Seek to the end of the file
+	_, err = file.Seek(0, io.SeekEnd)
+	if err != nil {
+		log.Println("error seeking file:", err)
+		return
+	}
+
+	// Use a goroutine to continuously read new lines
+	go func() {
+		reader := bufio.NewReader(file)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil && err != io.EOF {
+				log.Println("error reading log:", err)
+				break
+			}
+
+			// If we got a line, publish it
+			if line != "" {
+				err = s.Publish(&sse.Event{
+					Data: []byte(line),
+				})
+				if err != nil {
+					log.Println("error publishing log:", err)
+					break
+				}
+			}
+
+			// If we hit EOF, wait a bit and try again
+			if err == io.EOF {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+		}
+	}()
+
+	// Keep the connection open
+	<-ctx.Done()
 }

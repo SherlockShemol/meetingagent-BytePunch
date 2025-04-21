@@ -20,12 +20,15 @@ const showJsonBtn = document.getElementById('showJsonBtn');
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const sendMessageBtn = document.getElementById('sendMessageBtn');
+const taskList = document.getElementById('taskList'); // 新增 Task 列表元素
 
 // URL State Management
 function updateURLState() {
   const params = new URLSearchParams();
   if (currentMeetingId) params.set('meeting', currentMeetingId);
   if (currentTab) params.set('tab', currentTab);
+  // 注意：如果需要在 URL 中保留 JSON Path，需要添加逻辑
+  // if (currentTab === 'summary' && currentJsonPath) params.set('path', currentJsonPath);
 
   const newURL = `${window.location.pathname}?${params.toString()}`;
   window.history.pushState({}, '', newURL);
@@ -34,21 +37,27 @@ function updateURLState() {
 function loadURLState() {
   const params = new URLSearchParams(window.location.search);
   const meetingId = params.get('meeting');
-  const tab = params.get('tab') || 'content';
-  const path = params.get('path');
+  const tab = params.get('tab') || 'content'; // 默认是 content
+  const path = params.get('path'); // 暂时保留，虽然没在 Task 中使用
 
-  if (meetingId) {
-    selectMeeting(meetingId);
-  }
-
+  // 先切换 Tab 再加载 Meeting，确保 Meeting 加载时 Tab 状态正确
   if (tab) {
     switchTab(tab);
   }
 
+  if (meetingId) {
+    selectMeeting(meetingId); // selectMeeting 会处理加载数据和更新 UI
+  }
+
+  // 如果 URL 指定了 Summary Tab 和 Path，需要特殊处理
+  // if (tab === 'summary' && path && summaryJsonEditor) {
+  //   jsonPathInput.value = path;
+  //   convertToMarkdown(); // 假设 convertToMarkdown 会处理显示
+  // }
 }
 
 // Tab Management
-let currentTab = 'content';
+let currentTab = 'content'; // 确保默认值存在
 let currentJsonPath = '';
 
 function switchTab(tab) {
@@ -57,9 +66,15 @@ function switchTab(tab) {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
   document.querySelectorAll('.tab-content').forEach(content => {
+    // 确保 content.id 匹配 HTML 中的 ID (e.g., 'contentTab', 'summaryTab', 'chatTab', 'taskTab')
     content.classList.toggle('active', content.id === `${tab}Tab`);
   });
   updateURLState();
+
+  // 如果切换到 Task Tab 且有选中的会议，则加载任务
+  if (tab === 'task' && currentMeetingId) {
+    loadTasks(currentMeetingId);
+  }
 }
 
 // Initialize JSON Editor
@@ -206,6 +221,37 @@ async function loadMeetings() {
   }
 }
 
+// 新增: 加载任务列表的函数
+async function loadTasks(meetingId) {
+  if (!meetingId) return;
+  taskList.innerHTML = '<p class="text-gray-500">Loading tasks...</p>'; // 显示加载状态
+
+  try {
+    // 确保这里调用的是 /tasks 接口
+    const response = await fetch(`/tasks?meeting_id=${meetingId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch tasks: ${response.statusText}`);
+    }
+    const tasks = await response.json(); // 假设返回 { tasks: ["task1", "task2", ...] }
+
+    if (tasks && tasks.tasks && tasks.tasks.length > 0) {
+      // 根据实际返回的数据结构调整渲染逻辑
+      taskList.innerHTML = tasks.tasks.map((task, index) => `
+        <div class="p-2 border-b">
+          <input type="checkbox" id="task-${index}" class="mr-2">
+          <label for="task-${index}">${typeof task === 'string' ? task : JSON.stringify(task)}</label>
+        </div>
+      `).join('');
+    } else {
+      taskList.innerHTML = '<p class="text-gray-500">No tasks found for this meeting.</p>';
+    }
+  } catch (error) {
+    console.error('Error loading tasks:', error);
+    taskList.innerHTML = '<p class="text-red-500">Failed to load tasks.</p>';
+  }
+}
+
+
 async function selectMeeting(meetingId) {
   currentMeetingId = meetingId;
   currentSessionId = `session_${Date.now()}`;
@@ -233,7 +279,7 @@ async function selectMeeting(meetingId) {
       jsonEditor.expandAll();
     }
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error loading meeting content:', error);
   }
 
   // Load summary
@@ -254,15 +300,27 @@ async function selectMeeting(meetingId) {
     summaryJsonViewer.classList.remove('hidden');
     summaryMarkdown.classList.add('hidden');
     jsonPathInput.value = '';
+    currentJsonPath = ''; // 重置 JSON Path 状态
 
-    // Update URL state
-    updateURLState();
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error loading summary:', error);
   }
 
   // Clear chat
   chatMessages.innerHTML = '';
+  msgs = {}; // 清空消息缓存
+
+  // Load tasks if Task tab is active or becomes active later via switchTab
+  if (currentTab === 'task') {
+      loadTasks(meetingId);
+  } else {
+      // Optionally clear task list if not the active tab, or leave as is
+      taskList.innerHTML = '<p class="text-gray-500">Select the Tasks tab to view.</p>';
+  }
+
+
+  // Update URL state *after* all data loading attempts and UI updates
+  updateURLState();
 }
 
 async function sendMessage() {
@@ -307,4 +365,4 @@ function addMessageToChat(msgID, message, type) {
 
 // Initialize
 loadMeetings();
-loadURLState(); 
+loadURLState(); // loadURLState 会处理初始 Tab 和 Meeting 的加载
