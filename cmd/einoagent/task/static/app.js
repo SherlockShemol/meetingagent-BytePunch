@@ -352,8 +352,7 @@ function addMessageToChat(msgID, message, type) {
 }
 
 // Initialize
-loadMeetings();
-loadURLState(); // loadURLState 会处理初始 Tab 和 Meeting 的加载
+
 
 
 // URL 参数处理
@@ -1009,6 +1008,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Initial Load ---
+    loadMeetings();
+    loadURLState(); // loadURLState 会处理初始 Tab 和 Meeting 的加载
     initializeFormValues(); // Set initial form values from URL or defaults
     loadTasks(); // Initial task load
 });

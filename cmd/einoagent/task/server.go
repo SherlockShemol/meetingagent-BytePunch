@@ -78,6 +78,7 @@ func BindRoutes(r *route.RouterGroup) error {
 			return
 		}
 		c.JSON(consts.StatusOK, resp)
+		fmt.Printf("Task API response: %v\n", resp)
 	})
 
 	// 静态文件服务

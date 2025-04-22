@@ -106,8 +106,6 @@ github.com/clbanning/mxj v1.8.4/go.mod h1:BVjHeAH+rl9rs6f+QIpeRl0tfu10SXn1pUSa5P
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cloudwego/base64x v0.1.5 h1:XPciSp1xaq2VCSt6lF0phncD4koWyULpl5bUxbfCyP4=
 github.com/cloudwego/base64x v0.1.5/go.mod h1:0zlkT4Wn5C6NdauXdJRhSKRlJvmclQ1hhJgA0rcu/8w=
-github.com/cloudwego/eino v0.3.25 h1:/ExJxjxsoGsbSQpa+glLqKsKgc6Njtknl6h0MuwJF0Q=
-github.com/cloudwego/eino v0.3.25/go.mod h1:wUjz990apdsaOraOXdh6CdhVXq8DJsOvLsVlxNTcNfY=
 github.com/cloudwego/eino v0.3.26 h1:FdJJTCdNrc9xPcYkLZiEyr7AA+WgyCKCbY+VNDXIaCE=
 github.com/cloudwego/eino v0.3.26/go.mod h1:wUjz990apdsaOraOXdh6CdhVXq8DJsOvLsVlxNTcNfY=
 github.com/cloudwego/eino-examples/quickstart/eino_assistant v0.0.0-20250331024332-7fc033fd1f94 h1:jW4tgGe68GT46vKBTTJeXnClyUvoYxUaRgsdj3oWYtg=
