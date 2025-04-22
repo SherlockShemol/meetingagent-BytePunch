@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
-package main
+package rag
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -32,23 +35,120 @@ import (
 	"github.com/cloudwego/eino-examples/quickstart/eino_assistant/eino/knowledgeindexing"
 )
 
+type MeetingContent struct {
+	Contents []struct {
+		TimeFrom string `json:"time_from"`
+		TimeTo   string `json:"time_to"`
+		User     string `json:"user"`
+		Content  struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"contents"`
+}
+
 func init() {
 	// check some essential envs
 	env.MustHasEnvs("ARK_API_KEY", "ARK_EMBEDDING_MODEL")
 }
 
-func main() {
-	ctx := context.Background()
-
-	err := indexMarkdownFiles(ctx, "./example/content.md")
+// SplitMarkdownFile 将 Markdown 文件切分为指定数量的文件
+func SplitMarkdownFile(inputPath string, maxChunks int) ([]string, error) {
+	// 读取原始文件内容
+	content, err := os.ReadFile(inputPath)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("read file %s failed: %w", inputPath, err)
 	}
 
-	fmt.Println("index success")
+	// 如果内容为空或不需要切分，直接返回原文件路径
+	if len(content) == 0 || maxChunks <= 1 {
+		return []string{inputPath}, nil
+	}
+
+	// 按行分割内容
+	lines := strings.Split(string(content), "\n")
+	totalLines := len(lines)
+	linesPerChunk := (totalLines + maxChunks - 1) / maxChunks // 向上取整
+
+	var outputFiles []string
+	currentChunk := strings.Builder{}
+	chunkCount := 0
+	lineCount := 0
+
+	for i, line := range lines {
+		currentChunk.WriteString(line + "\n")
+		lineCount++
+
+		// 当达到每块的行数或到达最后一行时，保存当前块
+		if lineCount >= linesPerChunk || i == totalLines-1 {
+			// 生成新的文件路径
+			chunkFileName := fmt.Sprintf("%s.part%d.md", strings.TrimSuffix(inputPath, ".md"), chunkCount)
+			err := os.WriteFile(chunkFileName, []byte(currentChunk.String()), 0644)
+			if err != nil {
+				return nil, fmt.Errorf("write chunk file %s failed: %w", chunkFileName, err)
+			}
+			outputFiles = append(outputFiles, chunkFileName)
+			currentChunk.Reset()
+			chunkCount++
+			lineCount = 0
+		}
+	}
+
+	return outputFiles, nil
 }
 
-func indexMarkdownFiles(ctx context.Context, dir string) error {
+// func main() {
+// 	ctx := context.Background()
+
+// 	// 文件路径
+// 	filePath := "D:\\Github\\meetingagent-BytePunch\\example\\content.json"
+
+// 	// 检查文件类型
+// 	if strings.HasSuffix(filePath, ".json") {
+// 		// 如果是 JSON 文件，先转换为 Markdown
+// 		markdownFilePath := strings.Replace(filePath, ".json", ".md", 1)
+// 		err := convertJSONToMarkdown(filePath, markdownFilePath)
+// 		if err != nil {
+// 			panic(fmt.Errorf("failed to convert JSON to Markdown: %w", err))
+// 		}
+
+// 		// 然后索引 Markdown 文件
+// 		err = indexMarkdownFiles(ctx, markdownFilePath)
+// 		if err != nil {
+// 			panic(fmt.Errorf("failed to index Markdown file: %w", err))
+// 		}
+// 	} else {
+// 		fmt.Println("not support this file type")
+// 	}
+
+// 	fmt.Println("index success")
+// }
+
+func ConvertJSONToMarkdown(jsondata []byte, markdownFilePath string) error {
+
+	var meetingContent MeetingContent
+	if err := json.Unmarshal(jsondata, &meetingContent); err != nil {
+		return fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	// 创建 Markdown 文件
+	markdownFile, err := os.Create(markdownFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to create Markdown file: %w", err)
+	}
+	defer markdownFile.Close()
+	log.Printf("create markdown file: %s\n", markdownFilePath)
+	// 转换内容并写入 Markdown 文件
+	for _, content := range meetingContent.Contents {
+		line := fmt.Sprintf("%s-%s %s: %s\n", content.TimeFrom, content.TimeTo, content.User, content.Content.Text)
+		if _, err := markdownFile.WriteString(line); err != nil {
+			return fmt.Errorf("failed to write to Markdown file: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func IndexMarkdownFiles(ctx context.Context, dir string) error {
 	runner, err := knowledgeindexing.BuildKnowledgeIndexing(ctx)
 	if err != nil {
 		return fmt.Errorf("build index graph failed: %w", err)
@@ -70,13 +170,33 @@ func indexMarkdownFiles(ctx context.Context, dir string) error {
 
 		fmt.Printf("[start] indexing file: %s\n", path)
 
-		ids, err := runner.Invoke(ctx, document.Source{URI: path})
+		content, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("invoke index graph failed: %w", err)
+			return fmt.Errorf("read file %s failed: %w", path, err)
 		}
 
-		fmt.Printf("[done] indexing file: %s, len of parts: %d\n", path, len(ids))
+		// 如果文件内容超过 maxChunkSize，切分为多个文件
+		var filesToIndex []string
+		if len([]rune(string(content))) > 4096 {
+			fmt.Printf("[split] file %s exceeds max size, splitting into %d parts\n", path, 10)
+			filesToIndex, err = SplitMarkdownFile(path, 5)
+			if err != nil {
+				return fmt.Errorf("split file %s failed: %w", path, err)
+			}
+		} else {
+			filesToIndex = []string{path}
+		}
 
+		// 调用 runner 进行索引
+		for _, filePath := range filesToIndex {
+			fmt.Printf("[start] indexing file: %s\n", filePath)
+			ids, err := runner.Invoke(ctx, document.Source{URI: filePath})
+			if err != nil {
+				return fmt.Errorf("invoke index graph for file %s failed: %w", filePath, err)
+			}
+			fmt.Printf("[done] indexing file: %s, len of parts: %d\n", filePath, len(ids))
+		}
+		log.Printf("index完成")
 		return nil
 	})
 
@@ -92,7 +212,7 @@ type RedisVectorStoreConfig struct {
 	RedisAddr      string
 }
 
-func initVectorIndex(ctx context.Context, config *RedisVectorStoreConfig) (err error) {
+func InitVectorIndex(ctx context.Context, config *RedisVectorStoreConfig) (err error) {
 	if config.Embedding == nil {
 		return fmt.Errorf("embedding cannot be nil")
 	}
