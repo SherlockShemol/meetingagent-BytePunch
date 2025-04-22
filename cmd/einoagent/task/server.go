@@ -19,6 +19,7 @@ package task
 import (
 	"context"
 	"embed"
+	"fmt"
 	"mime"
 	"path/filepath"
 
@@ -43,12 +44,6 @@ type TodoUpdateParams struct {
 	Done      *bool   `json:"done,omitempty" jsonschema:"description=done status"`
 }
 
-// 处理函数
-func UpdateTodoFunc(_ context.Context, params *TodoUpdateParams) (string, error) {
-	// Mock处理逻辑
-	return `{"msg": "update todo success"}`, nil
-}
-
 // BindRoutes 注册路由
 func BindRoutes(r *route.RouterGroup) error {
 	ctx := context.Background()
@@ -65,46 +60,18 @@ func BindRoutes(r *route.RouterGroup) error {
 	r.POST("/api", func(ctx context.Context, c *app.RequestContext) {
 		var req task.TaskRequest
 		if err := c.Bind(&req); err != nil {
-			c.JSON(consts.StatusBadRequest, map[string]string{
+			c.JSON(consts.StatusBadRequest, map[string]interface{}{
 				"status": "error",
 				"error":  err.Error(),
 			})
 			return
 		}
-		var summaryReq task.TaskRequest
-		if req.Action == "generate_from_summary" {
-			summaryReq = task.TaskRequest{
-				Action: "add",
-				Task: &task.Task{
-					ID:        "generate_from_summary",
-					Title:     "task from summary",
-					Content:   "task from summary",
-					Completed: false,
-					Deadline:  "2025-01-01",
-					IsDeleted: false,
-					CreatedAt: "2025-01-01",
-				},
-				List: &task.ListParams{
-					Query:  "all",
-					IsDone: nil,
-					Limit:  nil,
-				},
-			}
-		} else {
-			summaryReq = req
-		}
-		summaryResp, err := taskTool.Invoke(ctx, &summaryReq)
-		if err != nil {
-			c.JSON(consts.StatusInternalServerError, map[string]string{
-				"status": "error",
-				"error":  err.Error(),
-			})
-			return
-		}
-		c.JSON(consts.StatusOK, summaryResp)
+
 		resp, err := taskTool.Invoke(ctx, &req)
 		if err != nil {
-			c.JSON(consts.StatusInternalServerError, map[string]string{
+			// 记录详细错误信息
+			fmt.Printf("Task API error: %v\n", err)
+			c.JSON(consts.StatusInternalServerError, map[string]interface{}{
 				"status": "error",
 				"error":  err.Error(),
 			})

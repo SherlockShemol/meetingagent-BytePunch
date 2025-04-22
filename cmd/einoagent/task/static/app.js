@@ -4,7 +4,7 @@ let currentSessionId = null;
 let currentMeetingContent = null;
 let jsonEditor = null;
 let summaryJsonEditor = null;
-let isTasksGenerated = false;
+
 
 // DOM Elements
 const meetingList = document.getElementById('meetingList');
@@ -74,11 +74,6 @@ function switchTab(tab) {
 
   // 如果切换到 Task Tab 且有选中的会议，则加载任务
   if (tab === 'task' && currentMeetingId) {
-    if (!isTasksGenerated) {
-      generateTasksFromSummary(currentMeetingId);
-      isTasksGenerated = true;
-    }
-    
     loadTasks(currentMeetingId);
   }
 }
@@ -228,70 +223,6 @@ async function loadMeetings() {
 }
 
 
-async function loadTasks() {
-  const params = getQueryParams();
-  const taskListElement = document.getElementById('taskList');
-  if (!taskListElement) return;
-
-  taskListElement.innerHTML = '<p class="text-gray-500 p-4">加载中...</p>';
-
-  try {
-      const response = await fetch('/task/api', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              action: 'list',
-              list: params
-          })
-      });
-
-      // 新增响应格式校验
-      if (!response.ok) {
-          throw new Error(`HTTP 错误: ${response.status}`);
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('无效的响应格式');
-      }
-
-      const data = await response.json();
-
-      // 统一数据结构处理
-      let tasks = [];
-      if (data?.task_list && Array.isArray(data.task_list)) { // 匹配 server.go 的返回格式
-          tasks = data.task_list;
-      } else if (Array.isArray(data)) { // 兼容直接返回数组的情况
-          tasks = data;
-      } else {
-          console.error('未知的响应结构:', data);
-          throw new Error('服务器返回了意外的数据结构');
-      }
-
-      // 数据格式化
-      const formattedTasks = tasks.map(task => ({
-          id: task.id || Math.random().toString(36).substr(2, 9),
-          title: task.title || '未命名任务',
-          content: task.content || '',
-          deadline: task.deadline || null,
-          completed: task.completed || false,
-          created_at: task.created_at || new Date().toISOString()
-      }));
-
-      renderTasks(formattedTasks);
-
-  } catch (error) {
-      console.error('加载任务失败:', error);
-      taskListElement.innerHTML = `
-          <div class="text-red-500 p-4">
-              <p>加载失败: ${error.message}</p>
-              ${error instanceof SyntaxError ? '<p class="text-sm">响应不是有效的 JSON</p>' : ''}
-          </div>
-      `;
-  }
-}
-
-
 async function selectMeeting(meetingId) {
   currentMeetingId = meetingId;
   currentSessionId = `session_${Date.now()}`;
@@ -388,9 +319,11 @@ async function sendMessage() {
   chatInput.value = '';
 
   // Start SSE connection and send message
-  const eventSource = new EventSource(`/chat?meeting_id=${currentMeetingId}&session_id=${currentSessionId}&message=${encodeURIComponent(message)}`);
+  const basePath = window.location.pathname.startsWith('/task') ? '/..' : '';
+  const eventSource = new EventSource(`${basePath}/chat?meeting_id=${currentMeetingId}&session_id=${currentSessionId}&message=${encodeURIComponent(message)}`);
   const assistantMsgID = Math.random().toString(36).substring(2, 15);
 
+ 
   eventSource.onmessage = (event) => {
     const data = JSON.parse(event.data);
     // 从响应中提取消息内容
@@ -558,14 +491,20 @@ function updateCountdown(element, deadline) {
 
 
 // Task 列表处理
-async function loadTasks() {
+async function loadTasks(meetingId) {
     const params = getQueryParams();
     const taskListElement = document.getElementById('taskList');
     if (!taskListElement) {
         console.error("Element with ID 'taskList' not found.");
         return; // Stop execution if the main container is missing
     }
-    taskListElement.innerHTML = '<p class="text-gray-500 p-4">任务待加入</p>'; // Show loading state
+    
+    if (!meetingId) {
+        taskListElement.innerHTML = '<p class="text-center text-gray-500 my-4">请先选择一个会议</p>';
+        return;
+    }
+    
+    taskListElement.innerHTML = '<p class="text-gray-500 p-4">加载中...</p>'; // Show loading state
 
     try {
         // IMPORTANT: Adjust the fetch URL if your API endpoint is different
@@ -574,7 +513,7 @@ async function loadTasks() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: 'list', // Ensure backend expects this action for listing
-                list: params     // Pass the filter/sort parameters
+                list: params // Include meeting ID with filter params
             })
         });
 
@@ -584,13 +523,36 @@ async function loadTasks() {
         }
 
         const data = await response.json();
+        console.log('Task data response:', data); // Add logging for debugging
 
-        // Check the structure of the response from your backend
-        if (data.status === 'success' && Array.isArray(data.task_list)) {
-            renderTasks(data.task_list);
-        } else if (Array.isArray(data)) { // Handle if backend returns just the array
-             console.warn("Backend returned an array directly. Assuming it's the task list.");
-             renderTasks(data);
+        // More flexible handling of different response formats
+        if (data.status === 'success') {
+            let tasksToRender = [];
+            
+            // Handle various possible response formats
+            if (Array.isArray(data.task_list)) {
+                tasksToRender = data.task_list;
+            } else if (data.tasks && Array.isArray(data.tasks)) {
+                tasksToRender = data.tasks;
+            } else if (data.data && Array.isArray(data.data)) {
+                tasksToRender = data.data;
+            } else if (typeof data.task_list === 'object' && data.task_list !== null) {
+                // Handle nested object cases
+                if (data.task_list.tasks && Array.isArray(data.task_list.tasks)) {
+                    tasksToRender = data.task_list.tasks;
+                } else if (data.task_list.data && Array.isArray(data.task_list.data)) {
+                    tasksToRender = data.task_list.data;
+                }
+            } else if (Array.isArray(data)) {
+                console.warn("Backend returned an array directly. Assuming it's the task list.");
+                tasksToRender = data;
+            }
+            
+            if (tasksToRender.length > 0) {
+                renderTasks(tasksToRender);
+            } else {
+                taskListElement.innerHTML = '<p class="text-center text-gray-500 my-4">没有找到任务</p>';
+            }
         } else {
             // Handle cases where the backend response format is unexpected
             console.error('Failed to load tasks: Invalid response format.', data);

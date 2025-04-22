@@ -39,7 +39,7 @@ func main() {
 
 	// Redirect root path to /agent
 	h.GET("/", func(ctx context.Context, c *app.RequestContext) {
-		c.Redirect(302, []byte("/agent"))
+		c.Redirect(302, []byte("/handlers"))
 	})
 
 	// Register API routes first
@@ -50,7 +50,7 @@ func main() {
 
 	// Serve static files
 	h.StaticFS("/", &app.FS{
-		Root:               "D:\\Github\\meetingagent-BytePunch\\cmd\\einoagent\\task\\static",
+		Root:               "./cmd/einoagent/task/static",
 		PathRewrite:        app.NewPathSlashesStripper(1),
 		IndexNames:         []string{"index.html"},
 		GenerateIndexPages: true,
