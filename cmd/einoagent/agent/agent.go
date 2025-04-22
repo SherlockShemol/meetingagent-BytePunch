@@ -95,6 +95,7 @@ func RunAgent(ctx context.Context, id string, msg string) (*schema.StreamReader[
 	}
 
 	srs := sr.Copy(2)
+	log.Printf("srs=%v", srs)
 
 	go func() {
 		// for save to memory

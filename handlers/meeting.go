@@ -298,6 +298,7 @@ func HandleChat(ctx context.Context, c *app.RequestContext) {
 	fmt.Printf("meetingID: %s, sessionID: %s, message: %s\n", meetingID, sessionID, message)
 
 	sr, err := agent.RunAgent(ctx, sessionID, message)
+
 	if err != nil {
 		log.Printf("[Chat] Error running agent: %v\n", err)
 		c.JSON(consts.StatusInternalServerError, map[string]string{
@@ -306,7 +307,6 @@ func HandleChat(ctx context.Context, c *app.RequestContext) {
 		})
 		return
 	}
-
 	// Create SSE stream
 	s := sse.NewStream(c)
 	defer func() {
