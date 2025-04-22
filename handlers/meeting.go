@@ -8,11 +8,13 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"meetingagent/cmd/einoagent/agent"
 	"meetingagent/models"
 	"meetingagent/pkg/env"
+	"meetingagent/rag"
 	"meetingagent/redis"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -91,6 +93,19 @@ func CreateMeeting(ctx context.Context, c *app.RequestContext) {
 
 	//fmt.Printf("create meeting: %s\n", string(jsonBody))
 
+	timestamp := time.Now().Format("20060102_150405")
+	markdownFilePath := filepath.Join("meetings", fmt.Sprintf("%s.md", timestamp))
+	if err := os.MkdirAll("meetings", 0755); err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Failed to create meetings directory: " + err.Error()})
+		return
+	}
+	// 调用 convertJSONToMarkdown 生成 Markdown 文件
+	if err := rag.ConvertJSONToMarkdown(jsonBody, markdownFilePath); err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Failed to convert JSON to Markdown: " + err.Error()})
+		return
+	}
+
+	rag.IndexMarkdownFiles(ctx, "meetings")
 	// TODO: Implement actual meeting creation logic
 	response := models.PostMeetingResponse{
 		ID: "meeting_" + time.Now().Format("20060102150405"),
