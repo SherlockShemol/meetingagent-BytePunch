@@ -5,9 +5,9 @@ go 1.23.4
 toolchain go1.24.2
 
 require (
-	github.com/cloudwego/eino v0.3.26
+	github.com/cloudwego/eino v0.3.27
 	github.com/cloudwego/eino-examples/quickstart/eino_assistant v0.0.0-20250331024332-7fc033fd1f94
-	github.com/cloudwego/eino-ext/callbacks/apmplus v0.0.0-20250226083455-1ccdc82184a9
+	github.com/cloudwego/eino-ext/callbacks/apmplus v0.0.0-20250424061409-ccd60fbc7c1c
 	github.com/cloudwego/eino-ext/callbacks/langfuse v0.0.0-20250117061805-cd80d1780d76
 	github.com/cloudwego/eino-ext/components/document/loader/file v0.0.0-20250225083118-fd27d80f189c
 	github.com/cloudwego/eino-ext/components/document/transformer/splitter/markdown v0.0.0-20250225083118-fd27d80f189c
