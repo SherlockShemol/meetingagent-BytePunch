@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package rag
+package main
 
 import (
 	"context"
@@ -96,32 +96,17 @@ func SplitMarkdownFile(inputPath string, maxChunks int) ([]string, error) {
 	return outputFiles, nil
 }
 
-// func main() {
-// 	ctx := context.Background()
+func main() {
+	ctx := context.Background()
 
-// 	// 文件路径
-// 	filePath := "D:\\Github\\meetingagent-BytePunch\\example\\content.json"
+	// 文件路径
+	err := IndexMarkdownFiles(ctx, "./example/")
+	if err != nil {
+		panic(err)
+	}
 
-// 	// 检查文件类型
-// 	if strings.HasSuffix(filePath, ".json") {
-// 		// 如果是 JSON 文件，先转换为 Markdown
-// 		markdownFilePath := strings.Replace(filePath, ".json", ".md", 1)
-// 		err := convertJSONToMarkdown(filePath, markdownFilePath)
-// 		if err != nil {
-// 			panic(fmt.Errorf("failed to convert JSON to Markdown: %w", err))
-// 		}
-
-// 		// 然后索引 Markdown 文件
-// 		err = indexMarkdownFiles(ctx, markdownFilePath)
-// 		if err != nil {
-// 			panic(fmt.Errorf("failed to index Markdown file: %w", err))
-// 		}
-// 	} else {
-// 		fmt.Println("not support this file type")
-// 	}
-
-// 	fmt.Println("index success")
-// }
+	fmt.Println("index success")
+}
 
 func ConvertJSONToMarkdown(jsondata []byte, markdownFilePath string) error {
 

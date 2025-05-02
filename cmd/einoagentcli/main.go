@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -18,8 +20,8 @@ import (
 
 	"github.com/cloudwego/eino-ext/callbacks/apmplus"
 	"github.com/cloudwego/eino-ext/devops"
+	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/compose"
-	"github.com/cloudwego/eino/internal/callbacks"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -160,10 +162,40 @@ func RunAgent(ctx context.Context, id string, msg string) (*schema.StreamReader[
 	srs := sr.Copy(2)
 
 	go func() {
-		
-	}
+		// for save to memory
+		fullMsgs := make([]*schema.Message, 0)
 
-	return agent.RunAgent(ctx, id, input)
+		defer func() {
+			srs[1].Close()
+
+			conversation.Append(schema.UserMessage(msg))
+
+			fullMsg, err := schema.ConcatMessages(fullMsgs)
+			if err != nil {
+				fmt.Println("error concatenating messages: ", err.Error())
+			}
+			conversation.Append(fullMsg)
+		}()
+
+	outer:
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Println("context done", ctx.Err())
+				return
+			default:
+				chunk, err := srs[1].Recv()
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						break outer
+					}
+				}
+				fullMsgs = append(fullMsgs, chunk)
+			}
+		}
+	}()
+
+	return srs[0], nil
 }
 
 type LogCallbackConfig struct {
